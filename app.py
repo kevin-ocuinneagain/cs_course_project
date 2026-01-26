@@ -7,7 +7,19 @@ app.config['FLASK_TITLE'] = ""
 
 # --- IN-MEMORY DATA STRUCTURES (Students will modify this area) ---
 # Phase 1: A simple Python List to store contacts
-contacts = [] 
+contacts = ["Alice",
+            "Charlie",
+            "Bob",
+            "Diana",] 
+
+# Searches for a contact by name, ignoring case.
+# Returns the contact's name if found, else None.
+def find_contact(name):
+    for contact in contacts:
+        if contact.lower() == name.lower():
+            return contact
+    return None
+
 
 # --- ROUTES ---
 
