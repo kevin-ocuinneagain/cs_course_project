@@ -1,18 +1,22 @@
 from flask import Flask, render_template, request, redirect, url_for
 import os
 
+class Node:
+    def __init__(self, data):
+        self.data = data
+        self.next = None
+
 app = Flask(__name__)
 
 app.config['FLASK_TITLE'] = ""
 
 # --- IN-MEMORY DATA STRUCTURES (Students will modify this area) ---
 # Phase 1: A simple Python List to store contacts
-contacts = [
-    {'name': 'Alice', 'email': 'alice@example.com'},
-    {'name': 'Charlie', 'email': 'charlie@example.com'},
-    {'name': 'Bob', 'email': 'bob@example.com'},
-    {'name': 'Diana', 'email': 'diana@example.com'},
-]
+# Phase 1: Initialize Linked List with contact data
+contacts = Node({'name': 'Alice', 'email': 'alice@example.com'})
+contacts.next = Node({'name': 'Charlie', 'email': 'charlie@example.com'})
+contacts.next.next = Node({'name': 'Bob', 'email': 'bob@example.com'})
+contacts.next.next.next = Node({'name': 'Diana', 'email': 'diana@example.com'})
 
 # Searches for a contact by name, ignoring case.
 # Returns the contact's name if found, else None.
