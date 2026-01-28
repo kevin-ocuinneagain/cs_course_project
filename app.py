@@ -7,16 +7,18 @@ app.config['FLASK_TITLE'] = ""
 
 # --- IN-MEMORY DATA STRUCTURES (Students will modify this area) ---
 # Phase 1: A simple Python List to store contacts
-contacts = ["Alice",
-            "Charlie",
-            "Bob",
-            "Diana",] 
+contacts = [
+    {'name': 'Alice', 'email': 'alice@example.com'},
+    {'name': 'Charlie', 'email': 'charlie@example.com'},
+    {'name': 'Bob', 'email': 'bob@example.com'},
+    {'name': 'Diana', 'email': 'diana@example.com'},
+]
 
 # Searches for a contact by name, ignoring case.
 # Returns the contact's name if found, else None.
 def find_contact(name):
     for contact in contacts:
-        if contact.lower() == name.lower():
+        if contact['name'].lower() == name.lower():
             return contact
     return None
 
@@ -30,7 +32,7 @@ def index():
     Eventually, students will pass their Linked List or Tree data here.
     """
     # Change the Flask HTML title to my name
-    app.config['FLASK_TITLE'] = "Your Name Here"
+    app.config['FLASK_TITLE'] = "Kevin O'Cuinneagain"
     return render_template('index.html', 
                          contacts=contacts, 
                          title=app.config['FLASK_TITLE'])
@@ -48,6 +50,21 @@ def add_contact():
     contacts.append({'name': name, 'email': email})
     
     return redirect(url_for('index'))
+
+@app.route('/search')
+def search():
+    query = request.args.get('query')
+
+    found = find_contact(query)
+
+    if found:
+        return render_template('index.html',
+                             contacts=[found],
+                             title=app.config['FLASK_TITLE'])
+
+    return render_template('index.html',
+                         contacts=[],
+                         title=app.config['FLASK_TITLE'])
 
 # --- DATABASE CONNECTIVITY (For later phases) ---
 # Placeholders for students to fill in during Sessions 5 and 27
