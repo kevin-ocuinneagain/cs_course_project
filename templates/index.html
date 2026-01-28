@@ -22,16 +22,16 @@
     <h3>Current Contacts (In-Memory)</h3>
     {% for contact in contacts %}
         <div class="card">
-            <strong>{{ contact.name }}</strong> - {{ contact.email }}
+            <strong>{{ contact['name'] }}</strong> - {{ contact['email'] }}
         </div>
     {% else %}
         <p>No contacts found.</p>
     {% endfor %}
-</body>
 
-<!-- Copilot, create a form with a text input based query and a search button-->
-<form action="/search" method="GET">
-    <input type="text" name="query" placeholder="Search contacts...">
-    <button type="submit">Search</button>
-</form>
+    <!-- Copilot, create a form with a text input based query and a search button-->
+    <form action="/search" method="GET">
+        <input type="text" name="query" placeholder="Search contacts...">
+        <button type="submit">Search</button>
+    </form>
+</body>
 </html>
