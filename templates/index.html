@@ -9,7 +9,16 @@
 </head>
 <body>
     <h1>{{ title }}'s Contact Manager</h1>
-    
+
+    <div style="margin-bottom: 10px;">
+        <form action="/undo" method="POST" style="display:inline;">
+            <button type="submit" {% if not can_undo %}disabled{% endif %}>Undo</button>
+        </form>
+        <form action="/redo" method="POST" style="display:inline;">
+            <button type="submit" {% if not can_redo %}disabled{% endif %}>Redo</button>
+        </form>
+    </div>
+
     <div style="background-color: #f0f0f0; padding: 15px;">
         <h3>Add New Contact</h3>
         <form action="/add" method="POST">
@@ -23,6 +32,11 @@
     {% for contact in contacts %}
         <div class="card">
             <strong>{{ contact['name'] }}</strong> - {{ contact['email'] }}
+            <form action="/delete" method="POST" style="display:inline; float:right;">
+                <input type="hidden" name="name" value="{{ contact['name'] }}">
+                <button type="submit">Delete</button>
+            </form>
+            <div style="clear:both;"></div>
         </div>
     {% else %}
         <p>No contacts found.</p>
