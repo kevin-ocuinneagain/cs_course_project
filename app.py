@@ -82,12 +82,72 @@ def snapshot_state():
 
 rebuild_hash_table()
 
+def quick_sort_contacts(items):
+    if len(items) <= 1:
+        return items
+
+    pivot = items[len(items) // 2]
+    pivot_name = pivot['name'].lower()
+
+    left = []
+    middle = []
+    right = []
+
+    for item in items:
+        name = item['name'].lower()
+        if name < pivot_name:
+            left.append(item)
+        elif name > pivot_name:
+            right.append(item)
+        else:
+            middle.append(item)
+
+    return quick_sort_contacts(left) + middle + quick_sort_contacts(right)
+
+def binary_search_contact(items, name):
+    low = 0
+    high = len(items) - 1
+    target = name.lower()
+
+    while low <= high:
+        mid = (low + high) // 2
+        mid_name = items[mid]['name'].lower()
+
+        if mid_name == target:
+            return items[mid]
+        elif mid_name < target:
+            low = mid + 1
+        else:
+            high = mid - 1
+
+    return None
+
 # Searches for a contact by name, ignoring case.
-# Returns the contact's name if found, else None.
+# Returns the contact dict if found, else None.
 def find_contact(name):
     if not name:
         return None
-    return contacts_table.get(name.lower())
+    sorted_contacts = quick_sort_contacts(contacts.to_list())
+    return binary_search_contact(sorted_contacts, name)
+
+# binary search by index/id position after sorting
+def find_contact_by_id(contact_id):
+    sorted_contacts = quick_sort_contacts(contacts.to_list())
+
+    low = 0
+    high = len(sorted_contacts) - 1
+
+    while low <= high:
+        mid = (low + high) // 2
+
+        if mid == contact_id:
+            return sorted_contacts[mid]
+        elif mid < contact_id:
+            low = mid + 1
+        else:
+            high = mid - 1
+
+    return None
 
 
 # --- ROUTES ---
