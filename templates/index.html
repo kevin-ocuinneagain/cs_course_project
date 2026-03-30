@@ -24,28 +24,47 @@
         <form action="/add" method="POST">
             <input type="text" name="name" placeholder="Name" required>
             <input type="email" name="email" placeholder="Email" required>
+            <input type="text" name="category" placeholder="Category" required>
+            <input type="number" name="vip_priority" placeholder="VIP Priority" min="0" value="0">
             <button type="submit">Add to Data Structure</button>
         </form>
     </div>
+
     <hr>
+
     <h3>Current Contacts (In-Memory)</h3>
     {% for contact in contacts %}
         <div class="card">
-            <strong>{{ contact['name'] }}</strong> - {{ contact['email'] }}
+            <strong>{{ contact['id'] }} - {{ contact['name'] }}</strong> - {{ contact['email'] }}
             <form action="/delete" method="POST" style="display:inline; float:right;">
                 <input type="hidden" name="name" value="{{ contact['name'] }}">
                 <button type="submit">Delete</button>
             </form>
+            <div style="margin-top: 6px;">Category: {{ contact['category'] }}</div>
+            <div>VIP Priority: {{ contact['vip_priority'] }}</div>
             <div style="clear:both;"></div>
         </div>
     {% else %}
         <p>No contacts found.</p>
     {% endfor %}
 
-    <!-- Copilot, create a form with a text input based query and a search button-->
     <form action="/search" method="GET">
-        <input type="text" name="query" placeholder="Search contacts...">
+        <input type="text" name="query" placeholder="Search contacts by name...">
         <button type="submit">Search</button>
+    </form>
+
+    <form action="/search_id" method="GET" style="margin-top: 8px;">
+        <input type="number" name="id" placeholder="Search by ID">
+        <button type="submit">Search ID</button>
+    </form>
+
+    <form action="/filter" method="GET" style="margin-top: 8px;">
+        <input type="text" name="category" placeholder="Filter by category">
+        <button type="submit">Filter</button>
+    </form>
+
+    <form action="/" method="GET" style="margin-top: 8px;">
+        <button type="submit">Show All</button>
     </form>
 </body>
 </html>
