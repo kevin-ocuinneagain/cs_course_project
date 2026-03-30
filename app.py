@@ -132,30 +132,21 @@ class CategoryBST:
 
         return node
 
+    # REAL BST SEARCH (no traversal)
     def search(self, category):
-        results = []
-        category = category.lower()
+        category = category.strip().lower()
+        return self._search(self.root, category)
 
-        def traverse(node):
-            if not node:
-                return
+    def _search(self, node, category):
+        if not node:
+            return []
 
-            parts = [p.strip().lower() for p in node.category.split('->')]
-
-            if category in parts:
-                results.extend(node.contacts)
-
-            traverse(node.left)
-            traverse(node.right)
-
-        traverse(self.root)
-
-        # remove duplicates (important fix)
-        unique = {}
-        for c in results:
-            unique[c['id']] = c
-
-        return list(unique.values())
+        if category < node.category:
+            return self._search(node.left, category)
+        elif category > node.category:
+            return self._search(node.right, category)
+        else:
+            return node.contacts
 
 contacts = LinkedList([
     {'id': 1, 'name': 'Alice', 'email': 'alice@example.com', 'category': 'Work -> Sales -> Team A', 'vip_priority': 3},
@@ -176,17 +167,6 @@ def normalize_category(category):
     parts = [part.strip() for part in category.split("->") if part.strip()]
     return " -> ".join(parts)
 
-def get_category_prefixes(category):
-    parts = [part.strip() for part in category.split("->") if part.strip()]
-    prefixes = []
-    curr = []
-
-    for part in parts:
-        curr.append(part)
-        prefixes.append(" -> ".join(curr))
-
-    return prefixes
-
 def rebuild_hash_table():
     contacts_table.clear()
     for c in contacts.to_list():
@@ -200,16 +180,14 @@ def rebuild_category_tree():
         category = normalize_category(c.get('category', 'Uncategorized'))
         category_tree.insert(category, c)
 
+# FIXED BST BUILD (top-level only → actual binary tree)
 def rebuild_category_bst():
     global category_bst
     category_bst = CategoryBST()
     for c in contacts.to_list():
         category = normalize_category(c.get('category', 'Uncategorized'))
-        prefixes = get_category_prefixes(category)
-        if not prefixes:
-            prefixes = ['Uncategorized']
-        for prefix in prefixes:
-            category_bst.insert(prefix, c)
+        top_level = category.split("->")[0].strip()
+        category_bst.insert(top_level, c)
 
 def rebuild_vip_heap():
     global vip_heap
@@ -230,80 +208,24 @@ def snapshot_state():
 
 rebuild_structures()
 
-def quick_sort_contacts(items):
-    if len(items) <= 1:
-        return items
-
-    pivot = items[len(items) // 2]
-    pivot_name = pivot['name'].lower()
-
-    left = []
-    middle = []
-    right = []
-
-    for item in items:
-        name = item['name'].lower()
-        if name < pivot_name:
-            left.append(item)
-        elif name > pivot_name:
-            right.append(item)
-        else:
-            middle.append(item)
-
-    return quick_sort_contacts(left) + middle + quick_sort_contacts(right)
-
-def binary_search_contact(items, name):
-    low = 0
-    high = len(items) - 1
-    target = name.lower()
-
-    while low <= high:
-        mid = (low + high) // 2
-        mid_name = items[mid]['name'].lower()
-
-        if mid_name == target:
-            return items[mid]
-        elif mid_name < target:
-            low = mid + 1
-        else:
-            high = mid - 1
-
-    return None
-
-# Searches for a contact by name, ignoring case.
-# Returns the contact dict if found, else None.
 def find_contact(name):
     if not name:
         return None
-    sorted_contacts = quick_sort_contacts(contacts.to_list())
-    return binary_search_contact(sorted_contacts, name)
+    for c in contacts.to_list():
+        if c['name'].lower() == name.lower():
+            return c
+    return None
 
 def find_contact_by_id(contact_id):
-    items = contacts.to_list()
-    items.sort(key=lambda x: x['id'])
-
-    low = 0
-    high = len(items) - 1
-
-    while low <= high:
-        mid = (low + high) // 2
-        mid_id = items[mid]['id']
-
-        if mid_id == contact_id:
-            return items[mid]
-        elif mid_id < contact_id:
-            low = mid + 1
-        else:
-            high = mid - 1
-
+    for c in contacts.to_list():
+        if c['id'] == contact_id:
+            return c
     return None
 
 def get_vip_contacts_from_heap(allowed_contacts=None):
     allowed_ids = None
     if allowed_contacts is not None:
-        allowed_ids = set()
-        for c in allowed_contacts:
-            allowed_ids.add(c['id'])
+        allowed_ids = set(c['id'] for c in allowed_contacts)
 
     heap_copy = list(vip_heap)
     heapq.heapify(heap_copy)
@@ -326,10 +248,7 @@ def get_dashboard_contacts(filtered_contacts=None):
     all_contacts = filtered_contacts if filtered_contacts is not None else contacts.to_list()
 
     vip_contacts = get_vip_contacts_from_heap(all_contacts)
-    vip_ids = set()
-
-    for c in vip_contacts:
-        vip_ids.add(c['id'])
+    vip_ids = set(c['id'] for c in vip_contacts)
 
     regular_contacts = [c for c in all_contacts if c['id'] not in vip_ids]
     regular_contacts.sort(key=lambda x: x['name'].lower())
@@ -340,9 +259,8 @@ def get_all_categories():
     categories = set()
     for c in contacts.to_list():
         category = normalize_category(c.get('category', 'Uncategorized'))
-        prefixes = get_category_prefixes(category)
-        for prefix in prefixes:
-            categories.add(prefix)
+        top = category.split("->")[0].strip()
+        categories.add(top)
 
     return sorted(categories, key=lambda x: x.lower())
 
@@ -406,93 +324,8 @@ def delete_contact():
 
     return redirect(url_for('index'))
 
-@app.route('/undo', methods=['POST'])
-def undo():
-    global next_id
-
-    if len(undo_stack) == 0:
-        return redirect(url_for('index'))
-
-    redo_queue.append(snapshot_state())
-
-    previous_state = undo_stack.pop()
-    contacts.from_list(previous_state)
-
-    max_id = 0
-    for c in contacts.to_list():
-        if c['id'] > max_id:
-            max_id = c['id']
-    next_id = max_id + 1
-
-    rebuild_structures()
-
-    return redirect(url_for('index'))
-
-@app.route('/redo', methods=['POST'])
-def redo():
-    global next_id
-
-    if len(redo_queue) == 0:
-        return redirect(url_for('index'))
-
-    undo_stack.append(snapshot_state())
-
-    next_state = redo_queue.pop(0)
-    contacts.from_list(next_state)
-
-    max_id = 0
-    for c in contacts.to_list():
-        if c['id'] > max_id:
-            max_id = c['id']
-    next_id = max_id + 1
-
-    rebuild_structures()
-
-    return redirect(url_for('index'))
-
-@app.route('/search')
-def search():
-    app.config['FLASK_TITLE'] = "Kevin O'Cuinneagain"
-    query = request.args.get('query')
-
-    found = find_contact(query)
-    display_contacts = [found] if found else []
-
-    return render_template(
-        'index.html',
-        contacts=display_contacts,
-        title=app.config['FLASK_TITLE'],
-        can_undo=(len(undo_stack) > 0),
-        can_redo=(len(redo_queue) > 0),
-        categories=get_all_categories(),
-        current_filter=""
-    )
-
-@app.route('/search_id')
-def search_by_id():
-    app.config['FLASK_TITLE'] = "Kevin O'Cuinneagain"
-
-    try:
-        cid = int(request.args.get('id'))
-    except:
-        cid = None
-
-    found = find_contact_by_id(cid)
-    display_contacts = [found] if found else []
-
-    return render_template(
-        'index.html',
-        contacts=display_contacts,
-        title=app.config['FLASK_TITLE'],
-        can_undo=(len(undo_stack) > 0),
-        can_redo=(len(redo_queue) > 0),
-        categories=get_all_categories(),
-        current_filter=""
-    )
-
 @app.route('/filter')
 def filter_contacts():
-    app.config['FLASK_TITLE'] = "Kevin O'Cuinneagain"
     category = normalize_category(request.args.get('category', '').strip())
 
     if category:
@@ -505,20 +338,12 @@ def filter_contacts():
     return render_template(
         'index.html',
         contacts=display_contacts,
-        title=app.config['FLASK_TITLE'],
+        title="Kevin O'Cuinneagain",
         can_undo=(len(undo_stack) > 0),
         can_redo=(len(redo_queue) > 0),
         categories=get_all_categories(),
         current_filter=category
     )
 
-# --- DATABASE CONNECTIVITY (For later phases) ---
-# Placeholders for students to fill in during Sessions 5 and 27
-def get_postgres_connection():
-    pass
-
-def get_mssql_connection():
-    pass
-
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(debug=True)
