@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for
 import os
+import heapq
 
 app = Flask(__name__)
 
@@ -61,26 +62,173 @@ class LinkedList:
         for item in items:
             self.append(item)
 
+class CategoryPathNode:
+    def __init__(self, name):
+        self.name = name
+        self.children = {}
+        self.contacts = []
+
+class CategoryTree:
+    def __init__(self):
+        self.root = CategoryPathNode("root")
+
+    def insert(self, category_path, contact):
+        parts = [part.strip() for part in category_path.split("->") if part.strip()]
+        curr = self.root
+        curr.contacts.append(contact)
+
+        for part in parts:
+            if part not in curr.children:
+                curr.children[part] = CategoryPathNode(part)
+            curr = curr.children[part]
+            curr.contacts.append(contact)
+
+    def get_contacts(self, category_path):
+        if not category_path:
+            return self.root.contacts
+
+        parts = [part.strip() for part in category_path.split("->") if part.strip()]
+        curr = self.root
+
+        for part in parts:
+            if part not in curr.children:
+                return []
+            curr = curr.children[part]
+
+        return curr.contacts
+
+class CategoryNode:
+    def __init__(self, category):
+        self.category = category
+        self.contacts = []
+        self.left = None
+        self.right = None
+
+class CategoryBST:
+    def __init__(self):
+        self.root = None
+
+    def insert(self, category, contact):
+        self.root = self._insert(self.root, category.strip().lower(), contact)
+
+    def _insert(self, node, category, contact):
+        if node is None:
+            node = CategoryNode(category)
+            node.contacts.append(contact)
+            return node
+
+        if category < node.category:
+            node.left = self._insert(node.left, category, contact)
+        elif category > node.category:
+            node.right = self._insert(node.right, category, contact)
+        else:
+            already_here = False
+            for c in node.contacts:
+                if c['id'] == contact['id']:
+                    already_here = True
+                    break
+            if not already_here:
+                node.contacts.append(contact)
+
+        return node
+
+    def search(self, category):
+        results = []
+        category = category.lower()
+
+        def traverse(node):
+            if not node:
+                return
+
+            parts = [p.strip().lower() for p in node.category.split('->')]
+
+            if category in parts:
+                results.extend(node.contacts)
+
+            traverse(node.left)
+            traverse(node.right)
+
+        traverse(self.root)
+
+        # remove duplicates (important fix)
+        unique = {}
+        for c in results:
+            unique[c['id']] = c
+
+        return list(unique.values())
+
 contacts = LinkedList([
-    {'name': 'Alice', 'email': 'alice@example.com'},
-    {'name': 'Charlie', 'email': 'charlie@example.com'},
-    {'name': 'Bob', 'email': 'bob@example.com'},
-    {'name': 'Diana', 'email': 'diana@example.com'},
+    {'id': 1, 'name': 'Alice', 'email': 'alice@example.com', 'category': 'Work -> Sales -> Team A', 'vip_priority': 3},
+    {'id': 2, 'name': 'Charlie', 'email': 'charlie@example.com', 'category': 'Family -> Close', 'vip_priority': 5},
+    {'id': 3, 'name': 'Bob', 'email': 'bob@example.com', 'category': 'Friends -> School', 'vip_priority': 0},
+    {'id': 4, 'name': 'Diana', 'email': 'diana@example.com', 'category': 'Work -> IT -> Team B', 'vip_priority': 2},
 ])
 
+next_id = 5
 contacts_table = {}
+category_tree = CategoryTree()
+category_bst = CategoryBST()
+vip_heap = []
 undo_stack = []
 redo_queue = []
+
+def normalize_category(category):
+    parts = [part.strip() for part in category.split("->") if part.strip()]
+    return " -> ".join(parts)
+
+def get_category_prefixes(category):
+    parts = [part.strip() for part in category.split("->") if part.strip()]
+    prefixes = []
+    curr = []
+
+    for part in parts:
+        curr.append(part)
+        prefixes.append(" -> ".join(curr))
+
+    return prefixes
 
 def rebuild_hash_table():
     contacts_table.clear()
     for c in contacts.to_list():
         contacts_table[c['name'].lower()] = c
+        contacts_table[f"id:{c['id']}"] = c
+
+def rebuild_category_tree():
+    global category_tree
+    category_tree = CategoryTree()
+    for c in contacts.to_list():
+        category = normalize_category(c.get('category', 'Uncategorized'))
+        category_tree.insert(category, c)
+
+def rebuild_category_bst():
+    global category_bst
+    category_bst = CategoryBST()
+    for c in contacts.to_list():
+        category = normalize_category(c.get('category', 'Uncategorized'))
+        prefixes = get_category_prefixes(category)
+        if not prefixes:
+            prefixes = ['Uncategorized']
+        for prefix in prefixes:
+            category_bst.insert(prefix, c)
+
+def rebuild_vip_heap():
+    global vip_heap
+    vip_heap = []
+    for c in contacts.to_list():
+        priority = int(c.get('vip_priority', 0))
+        if priority > 0:
+            heapq.heappush(vip_heap, (-priority, c['id'], c))
+
+def rebuild_structures():
+    rebuild_hash_table()
+    rebuild_category_tree()
+    rebuild_category_bst()
+    rebuild_vip_heap()
 
 def snapshot_state():
     return [dict(c) for c in contacts.to_list()]
 
-rebuild_hash_table()
+rebuild_structures()
 
 def quick_sort_contacts(items):
     if len(items) <= 1:
@@ -130,57 +278,117 @@ def find_contact(name):
     sorted_contacts = quick_sort_contacts(contacts.to_list())
     return binary_search_contact(sorted_contacts, name)
 
-# binary search by index/id position after sorting
 def find_contact_by_id(contact_id):
-    sorted_contacts = quick_sort_contacts(contacts.to_list())
+    items = contacts.to_list()
+    items.sort(key=lambda x: x['id'])
 
     low = 0
-    high = len(sorted_contacts) - 1
+    high = len(items) - 1
 
     while low <= high:
         mid = (low + high) // 2
+        mid_id = items[mid]['id']
 
-        if mid == contact_id:
-            return sorted_contacts[mid]
-        elif mid < contact_id:
+        if mid_id == contact_id:
+            return items[mid]
+        elif mid_id < contact_id:
             low = mid + 1
         else:
             high = mid - 1
 
     return None
 
+def get_vip_contacts_from_heap(allowed_contacts=None):
+    allowed_ids = None
+    if allowed_contacts is not None:
+        allowed_ids = set()
+        for c in allowed_contacts:
+            allowed_ids.add(c['id'])
+
+    heap_copy = list(vip_heap)
+    heapq.heapify(heap_copy)
+
+    vip_contacts = []
+    seen = set()
+
+    while heap_copy:
+        priority, cid, contact = heapq.heappop(heap_copy)
+        if cid in seen:
+            continue
+        if allowed_ids is not None and cid not in allowed_ids:
+            continue
+        vip_contacts.append(contact)
+        seen.add(cid)
+
+    return vip_contacts
+
+def get_dashboard_contacts(filtered_contacts=None):
+    all_contacts = filtered_contacts if filtered_contacts is not None else contacts.to_list()
+
+    vip_contacts = get_vip_contacts_from_heap(all_contacts)
+    vip_ids = set()
+
+    for c in vip_contacts:
+        vip_ids.add(c['id'])
+
+    regular_contacts = [c for c in all_contacts if c['id'] not in vip_ids]
+    regular_contacts.sort(key=lambda x: x['name'].lower())
+
+    return vip_contacts + regular_contacts
+
+def get_all_categories():
+    categories = set()
+    for c in contacts.to_list():
+        category = normalize_category(c.get('category', 'Uncategorized'))
+        prefixes = get_category_prefixes(category)
+        for prefix in prefixes:
+            categories.add(prefix)
+
+    return sorted(categories, key=lambda x: x.lower())
 
 # --- ROUTES ---
 
 @app.route('/')
 def index():
-    """
-    Displays the main page.
-    Eventually, students will pass their Linked List or Tree data here.
-    """
-    # Change the Flask HTML title to my name
     app.config['FLASK_TITLE'] = "Kevin O'Cuinneagain"
-    return render_template('index.html',
-                         contacts=contacts.to_list(),
-                         title=app.config['FLASK_TITLE'],
-                         can_undo=(len(undo_stack) > 0),
-                         can_redo=(len(redo_queue) > 0))
+    display_contacts = get_dashboard_contacts()
+
+    return render_template(
+        'index.html',
+        contacts=display_contacts,
+        title=app.config['FLASK_TITLE'],
+        can_undo=(len(undo_stack) > 0),
+        can_redo=(len(redo_queue) > 0),
+        categories=get_all_categories(),
+        current_filter=""
+    )
 
 @app.route('/add', methods=['POST'])
 def add_contact():
-    """
-    Endpoint to add a new contact.
-    Students will update this to insert into their Data Structure.
-    """
+    global next_id
     name = request.form.get('name')
     email = request.form.get('email')
+    category = normalize_category(request.form.get('category') or 'Uncategorized')
+
+    try:
+        vip_priority = int(request.form.get('vip_priority', 0))
+    except:
+        vip_priority = 0
 
     undo_stack.append(snapshot_state())
     redo_queue.clear()
 
-    # Phase 1 Logic: Append to list
-    contacts.append({'name': name, 'email': email})
-    contacts_table[name.lower()] = {'name': name, 'email': email}
+    new_contact = {
+        'id': next_id,
+        'name': name,
+        'email': email,
+        'category': category,
+        'vip_priority': vip_priority
+    }
+    next_id += 1
+
+    contacts.append(new_contact)
+    rebuild_structures()
 
     return redirect(url_for('index'))
 
@@ -193,14 +401,15 @@ def delete_contact():
     undo_stack.append(snapshot_state())
     redo_queue.clear()
 
-    removed = contacts.remove_by_name(name)
-    if removed:
-        contacts_table.pop(removed['name'].lower(), None)
+    contacts.remove_by_name(name)
+    rebuild_structures()
 
     return redirect(url_for('index'))
 
 @app.route('/undo', methods=['POST'])
 def undo():
+    global next_id
+
     if len(undo_stack) == 0:
         return redirect(url_for('index'))
 
@@ -208,12 +417,21 @@ def undo():
 
     previous_state = undo_stack.pop()
     contacts.from_list(previous_state)
-    rebuild_hash_table()
+
+    max_id = 0
+    for c in contacts.to_list():
+        if c['id'] > max_id:
+            max_id = c['id']
+    next_id = max_id + 1
+
+    rebuild_structures()
 
     return redirect(url_for('index'))
 
 @app.route('/redo', methods=['POST'])
 def redo():
+    global next_id
+
     if len(redo_queue) == 0:
         return redirect(url_for('index'))
 
@@ -221,7 +439,14 @@ def redo():
 
     next_state = redo_queue.pop(0)
     contacts.from_list(next_state)
-    rebuild_hash_table()
+
+    max_id = 0
+    for c in contacts.to_list():
+        if c['id'] > max_id:
+            max_id = c['id']
+    next_id = max_id + 1
+
+    rebuild_structures()
 
     return redirect(url_for('index'))
 
@@ -231,19 +456,61 @@ def search():
     query = request.args.get('query')
 
     found = find_contact(query)
+    display_contacts = [found] if found else []
 
-    if found:
-        return render_template('index.html',
-                             contacts=[found],
-                             title=app.config['FLASK_TITLE'],
-                             can_undo=(len(undo_stack) > 0),
-                             can_redo=(len(redo_queue) > 0))
+    return render_template(
+        'index.html',
+        contacts=display_contacts,
+        title=app.config['FLASK_TITLE'],
+        can_undo=(len(undo_stack) > 0),
+        can_redo=(len(redo_queue) > 0),
+        categories=get_all_categories(),
+        current_filter=""
+    )
 
-    return render_template('index.html',
-                         contacts=[],
-                         title=app.config['FLASK_TITLE'],
-                         can_undo=(len(undo_stack) > 0),
-                         can_redo=(len(redo_queue) > 0))
+@app.route('/search_id')
+def search_by_id():
+    app.config['FLASK_TITLE'] = "Kevin O'Cuinneagain"
+
+    try:
+        cid = int(request.args.get('id'))
+    except:
+        cid = None
+
+    found = find_contact_by_id(cid)
+    display_contacts = [found] if found else []
+
+    return render_template(
+        'index.html',
+        contacts=display_contacts,
+        title=app.config['FLASK_TITLE'],
+        can_undo=(len(undo_stack) > 0),
+        can_redo=(len(redo_queue) > 0),
+        categories=get_all_categories(),
+        current_filter=""
+    )
+
+@app.route('/filter')
+def filter_contacts():
+    app.config['FLASK_TITLE'] = "Kevin O'Cuinneagain"
+    category = normalize_category(request.args.get('category', '').strip())
+
+    if category:
+        filtered = category_bst.search(category)
+    else:
+        filtered = contacts.to_list()
+
+    display_contacts = get_dashboard_contacts(filtered)
+
+    return render_template(
+        'index.html',
+        contacts=display_contacts,
+        title=app.config['FLASK_TITLE'],
+        can_undo=(len(undo_stack) > 0),
+        can_redo=(len(redo_queue) > 0),
+        categories=get_all_categories(),
+        current_filter=category
+    )
 
 # --- DATABASE CONNECTIVITY (For later phases) ---
 # Placeholders for students to fill in during Sessions 5 and 27
@@ -254,5 +521,4 @@ def get_mssql_connection():
     pass
 
 if __name__ == '__main__':
-    # Run the Flask app on port 5000, accessible externally
     app.run(host='0.0.0.0', port=5000, debug=True)
